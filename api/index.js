@@ -1,13 +1,31 @@
-require('dotenv').config();
+const mongoose = require('mongoose');
 const app = require('../src/app');
-const connectDB = require('../src/config/db');
 
-let isConnected = false;
+// Cache the connection across serverless invocations
+let cachedConnection = null;
+
+async function connectDB() {
+  if (cachedConnection && mongoose.connection.readyState === 1) {
+    return cachedConnection;
+  }
+
+  cachedConnection = await mongoose.connect(process.env.MONGODB_URI, {
+    serverSelectionTimeoutMS: 10000,
+    socketTimeoutMS: 45000,
+  });
+
+  return cachedConnection;
+}
 
 module.exports = async (req, res) => {
-  if (!isConnected) {
+  try {
     await connectDB();
-    isConnected = true;
+    return app(req, res);
+  } catch (error) {
+    console.error('Handler error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error: ' + error.message,
+    });
   }
-  return app(req, res);
 };
